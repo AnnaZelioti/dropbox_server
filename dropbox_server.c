@@ -160,7 +160,7 @@ int main(int argc, char* argv[]){
 				}
 				else{	//Client not found
 					printf("ERROR_IP_PORT_NOT_FOUND_IN_LIST\n");
-					if(send(newsocket,"ERROR_IP_PORT_NOT_FOUND_IN_LIST,strlen("ERROR_IP_PORT_NOT_FOUND_IN_LIST),0)==-1)
+					if(send(newsocket,"ERROR_IP_PORT_NOT_FOUND_IN_LIST",strlen("ERROR_IP_PORT_NOT_FOUND_IN_LIST"),0)==-1)
 						perror_exit("write");		
 				}
 				break;
