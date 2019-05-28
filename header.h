@@ -4,17 +4,18 @@ typedef struct listnode * listptr;
 
 struct listnode {
 
-	char* filename;
-	int id;
+	char* clientIP;
+	char* clientPort;
 	listptr next;
 
 };
 
 
 //List funcions
-void insertList(listptr*, char*);
+void insertList(listptr*, char*, char*);
 void destroyList(listptr*);
-int isInList(listptr,char*);
+int deleteClient(listptr*, char*, char*);
+int isInList(listptr,char*, char*);
 void print(listptr);
 
 
