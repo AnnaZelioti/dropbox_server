@@ -5,17 +5,17 @@ typedef struct listnode * listptr;
 struct listnode {
 
 	char* clientIP;
-	char* clientPort;
+	int clientPort;
 	listptr next;
 
 };
 
 
 //List funcions
-void insertList(listptr*, char*, char*);
+void insertList(listptr*, char*, int);
 void destroyList(listptr*);
-int deleteClient(listptr*, char*, char*);
-int isInList(listptr,char*, char*);
+int deleteClient(listptr*, char*, int);
+int isInList(listptr,char*, int);
 void print(listptr);
 
 

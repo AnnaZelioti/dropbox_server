@@ -7,19 +7,24 @@
 #include <unistd.h>
 #include <string.h>
 #include "header.h"
+#include <arpa/inet.h>
 
 int main(int argc, char* argv[]){
 
-	char buf[1024], command[14], ip[14], clientPort[10];
-	int port, sock, newsocket, clientSock, receiveLen, sendLen, c;
+	char buf[1024], command[14], recip[14], recClientPort[10], *ip;
+	long int lip;
+	int port, iport, sock, newsocket, clientSock, receiveLen, c, numOfClients=0, n, m, clientPort, turns=0;
+//	int sendLen;
+//	unit32_t iip;
+//	unit16_t iport;
 	socklen_t clientlen;
-	struct sockaddr_in server, client, serverClient;
+	struct sockaddr_in server, client, serverClient, dummy;
 	struct sockaddr *serverptr = (struct sockaddr *) &server;
 	struct sockaddr *serverClientptr = (struct sockaddr *) &serverClient;
 	struct sockaddr *clientptr = (struct sockaddr *) &client;
 
 	struct hostent *rem, *clientRem;
-	listptr clientList=NULL;
+	listptr clientList=NULL, templist;
 	
 	if(argc<3){
 		printf("PLease give port number!\n");
@@ -66,8 +71,18 @@ int main(int argc, char* argv[]){
         	close(newsocket);
         	exit(1);
     	}
-		sscanf(buf,"%s %s %s", command, ip, clientPort);
+		sscanf(buf,"%s %s %s", command, recip, recClientPort);
 		printf("Received command: <%s>\n",command);
+		printf("Received client ip <%s>\n", recip);
+		lip=atol(recip);  // Convert to long int 
+		dummy.sin_addr.s_addr=lip;
+		ip=inet_ntoa(dummy.sin_addr); // convert to string format ex 123.123.123.123)
+		printf("IP is %s\n",ip);
+		printf("Received client port <%s>\n", recClientPort);
+		iport=atoi(recClientPort);
+		clientPort=ntohs(iport);
+		printf("Port now is : %d\n", clientPort);
+
 
 		if( strcmp(command, "LOG_ON")==0) 
 			c=1;
@@ -78,8 +93,7 @@ int main(int argc, char* argv[]){
 
 		switch(c){
 			case 1:
-				printf("Received client ip <%s>\n", ip);
-				printf("Received client port <%s>\n", clientPort);
+
 				//LOG_ON
 	
 				//Insert client in list if he does not already exist
@@ -87,8 +101,10 @@ int main(int argc, char* argv[]){
 					insertList(&clientList,ip,clientPort);
 					printf("Inserted a new client in my list!\n");
 				}
+				numOfClients++;
+
 				//Send the USER_ON <IP, port> to all the clients 
-				listptr templist=clientList;
+				templist=clientList;
 				while(templist!=NULL){
 					//Create socket
 					if((clientSock=socket(AF_INET,SOCK_STREAM,0))<0)
@@ -102,24 +118,39 @@ int main(int argc, char* argv[]){
 	
 					serverClient.sin_family=AF_INET;
 					memcpy(&serverClient.sin_addr,clientRem->h_addr, clientRem->h_length);
-					serverClient.sin_port=htons(atoi(clientList->clientPort));
+					serverClient.sin_port=htons(clientList->clientPort);
 
 					//Initiate Connection
 					if((connect(clientSock,serverClientptr,sizeof(serverClient)))<0)
 				 	   perror_exit("connect");
-					//printf("Connecting to %s serverPort %d\n",argv[4],serverPort);
-					snprintf(buf, 10 + strlen(ip) + strlen(clientPort) , "USER_ON %s %s" ,ip, clientPort );
+
+					//Change IP and port format
+					inet_aton(ip,&dummy.sin_addr);
+					m=numOfDigits(dummy.sin_addr.s_addr);
+					n=numOfDigits(htons(clientPort));
+					snprintf(buf, 10 + m + n , "USER_ON %u %d" ,dummy.sin_addr.s_addr, htons(clientPort) );
    				 	//Send the character
    		 			if(send(clientSock,buf,strlen(buf),0)==-1)
 						perror_exit("write");
 					close(clientSock);
 					templist=templist->next;
 				}
+				break;
 				
 			case 2: 
 				//GET_CLIENTS
 				//CLIENT_LIST N <IP1, PORT1> <IP2 PORT2> ... <IPN, PORTN>
-				
+				n=numOfDigits(numOfClients);
+				snprintf(buf, n + strlen("CLIENT_LIST") + 1, "CLIENT_LIST %d", numOfClients);
+				send(newsocket, buf, strlen(buf),0);
+				templist=clientList;
+				while(templist!=NULL){
+					inet_aton(clientList->clientIP,&dummy.sin_addr);
+					m=numOfDigits(dummy.sin_addr.s_addr);
+					n=numOfDigits(htons(clientList->clientPort));
+					snprintf(buf, m + n + 2 , "%u %d" ,dummy.sin_addr.s_addr, htons(clientList->clientPort) );
+					templist=templist->next;
+				}
 				break;
 	
 			case 3: 
@@ -128,8 +159,9 @@ int main(int argc, char* argv[]){
 				//Find the  client that is logging off
 				// Remove the client from our list
 				if(deleteClient(&clientList, ip, clientPort)){
+					numOfClients--;
 				//Send the USER_OFF <IPadress, portNum> to all the clients
-					listptr templist=clientList;
+					templist=clientList;
 					while(templist!=NULL){
 						//Create socket
 						if((clientSock=socket(AF_INET,SOCK_STREAM,0))<0)
@@ -143,13 +175,15 @@ int main(int argc, char* argv[]){
 	
 						serverClient.sin_family=AF_INET;
 						memcpy(&serverClient.sin_addr,clientRem->h_addr, clientRem->h_length);
-						serverClient.sin_port=htons(atoi(clientList->clientPort));
+						serverClient.sin_port=htons(clientList->clientPort);
 	
 						//Initiate Connection
 						if((connect(clientSock,serverClientptr,sizeof(serverClient)))<0)
 					 	   perror_exit("connect");
 						//printf("Connecting to %s serverPort %d\n",argv[4],serverPort);
-						snprintf(buf, 10 + strlen(ip) + strlen(clientPort) , "USER_OFF %s %s" ,ip, clientPort );
+						n=numOfDigits(numOfClients);
+						snprintf(buf, 10 + strlen(ip) + n , "USER_OFF %s %d" ,ip, clientPort );
+					
 	   				 	//Send the character
 	   		 			if(send(clientSock,buf,strlen(buf),0)==-1)
 							perror_exit("write");
@@ -170,8 +204,11 @@ int main(int argc, char* argv[]){
 		}
 		print(clientList);
 		close(newsocket);
-		break;
+		turns++;
+		if(turns==2)
+			break;
    }
+
 	destroyList(&clientList);
 	close(sock);
 	return 0;
