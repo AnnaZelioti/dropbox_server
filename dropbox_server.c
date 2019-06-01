@@ -106,34 +106,39 @@ int main(int argc, char* argv[]){
 				//Send the USER_ON <IP, port> to all the clients 
 				templist=clientList;
 				while(templist!=NULL){
-					//Create socket
-					if((clientSock=socket(AF_INET,SOCK_STREAM,0))<0)
- 					   perror_exit("socket");
-
-					//Find server address 
-					if((clientRem=gethostbyname(clientList->clientIP))==NULL){
-						herror("gethostbyname");
-    					exit(1);
-					}
+					//Don't send the log on message to the client connecting
+					if((strcmp(templist->clientIP,ip)!=0)&&(templist->clientPort!=clientPort)){
+						printf("HI\n");
+						//Create socket
+						if((clientSock=socket(AF_INET,SOCK_STREAM,0))<0)
+	 					   perror_exit("socket");
 	
-					serverClient.sin_family=AF_INET;
-					memcpy(&serverClient.sin_addr,clientRem->h_addr, clientRem->h_length);
-					serverClient.sin_port=htons(clientList->clientPort);
+						//Find server address 
+						if((clientRem=gethostbyname(clientList->clientIP))==NULL){
+							herror("gethostbyname");
+	    					exit(1);
+						}
+		
+						serverClient.sin_family=AF_INET;
+						memcpy(&serverClient.sin_addr,clientRem->h_addr, clientRem->h_length);
+						serverClient.sin_port=htons(clientList->clientPort);
 
-					//Initiate Connection
-					if((connect(clientSock,serverClientptr,sizeof(serverClient)))<0)
-				 	   perror_exit("connect");
+						//Initiate Connection
+						if((connect(clientSock,serverClientptr,sizeof(serverClient)))<0)
+				 	   		perror_exit("connect");
 
-					//Change IP and port format
-					inet_aton(ip,&dummy.sin_addr);
-					m=numOfDigits(dummy.sin_addr.s_addr);
-					n=numOfDigits(htons(clientPort));
-					snprintf(buf, 10 + m + n , "USER_ON %u %d" ,dummy.sin_addr.s_addr, htons(clientPort) );
-   				 	//Send the character
-   		 			if(send(clientSock,buf,strlen(buf),0)==-1)
-						perror_exit("write");
+						//Change IP and port format
+						inet_aton(ip,&dummy.sin_addr);
+						m=numOfDigits(dummy.sin_addr.s_addr);
+						n=numOfDigits(htons(clientPort));
+						snprintf(buf, 10 + m + n , "USER_ON %u %d" ,dummy.sin_addr.s_addr, htons(clientPort) );
+	   				 	//Send the character
+	   		 			if(send(clientSock,buf,strlen(buf),0)==-1)
+							perror_exit("write");
+					}
 					close(clientSock);
 					templist=templist->next;
+					
 				}
 				break;
 				
@@ -142,6 +147,7 @@ int main(int argc, char* argv[]){
 				//CLIENT_LIST N <IP1, PORT1> <IP2 PORT2> ... <IPN, PORTN>
 				n=numOfDigits(numOfClients);
 				snprintf(buf, n + strlen("CLIENT_LIST") + 1, "CLIENT_LIST %d", numOfClients);
+				printf("BUf is : %s\n", buf);
 				send(newsocket, buf, strlen(buf),0);
 				templist=clientList;
 				while(templist!=NULL){
@@ -205,6 +211,7 @@ int main(int argc, char* argv[]){
 		print(clientList);
 		close(newsocket);
 		turns++;
+		c=0;
 		if(turns==2)
 			break;
    }
