@@ -8,12 +8,19 @@
 #include <string.h>
 #include "header.h"
 #include <arpa/inet.h>
+#include <signal.h>
+
+void signal_handler(int signo); 
+volatile int run=1;
 
 int main(int argc, char* argv[]){
 
 	char buf[1024], command[14], recip[14], recClientPort[10], *ip;
 	long int lip;
-	int port, iport, sock, newsocket, clientSock, receiveLen, c, numOfClients=0, n, m, clientPort, turns=0;
+    in_addr_t ip_addr;
+	int port, iport, sock, newsocket, clientSock, receiveLen, c, numOfClients=0, n, m, clientPort;
+	struct sigaction sa;
+	sa.sa_handler=signal_handler;
 	socklen_t clientlen;
 	struct sockaddr_in server, client, serverClient, dummy;
 	struct sockaddr *serverptr = (struct sockaddr *) &server;
@@ -47,9 +54,10 @@ int main(int argc, char* argv[]){
   	  perror_exit("listen");
 	printf("Listening for connections to port %d\n",port);
 
-	while(1){
+	while(run){
    		clientlen=sizeof(client);
-
+		if(sigaction(SIGINT, &sa,NULL)==-1)
+			perror("SIGACTION");
  		//Accept Connection
     	if((newsocket=accept(sock, clientptr, &clientlen))<0)
 			perror_exit("accept");
@@ -62,7 +70,7 @@ int main(int argc, char* argv[]){
     	printf("Accepted connection from %s\n", rem->h_name);
 
 		//recieve message
-		receiveLen = recv(newsocket, &buf, 1024 ,0);
+		receiveLen = recv(newsocket, buf, 1024 ,0);
     	if (receiveLen == -1){
         	printf("Error: receive has been  %d\n", newsocket);
         	close(newsocket);
@@ -104,21 +112,20 @@ int main(int argc, char* argv[]){
 				templist=clientList;
 				while(templist!=NULL){
 					//Don't send the log on message to the client connecting
-					if((strcmp(templist->clientIP,ip)!=0)&&(templist->clientPort!=clientPort)){
-						printf("HI\n");
+					if((strcmp(templist->clientIP,ip)!=0)||(templist->clientPort!=clientPort)){
 						//Create socket
 						if((clientSock=socket(AF_INET,SOCK_STREAM,0))<0)
 	 					   perror_exit("socket");
 	
 						//Find server address 
-						if((clientRem=gethostbyname(clientList->clientIP))==NULL){
+						if((clientRem=gethostbyname(templist->clientIP))==NULL){
 							herror("gethostbyname");
 	    					exit(1);
 						}
 		
 						serverClient.sin_family=AF_INET;
 						memcpy(&serverClient.sin_addr,clientRem->h_addr, clientRem->h_length);
-						serverClient.sin_port=htons(clientList->clientPort);
+						serverClient.sin_port=htons(templist->clientPort);
 
 						//Initiate Connection
 						if((connect(clientSock,serverClientptr,sizeof(serverClient)))<0)
@@ -126,11 +133,10 @@ int main(int argc, char* argv[]){
 
 						//Change IP and port format
 						inet_aton(ip,&dummy.sin_addr);
-						m=numOfDigits(dummy.sin_addr.s_addr);
-						n=numOfDigits(htons(clientPort));
-						snprintf(buf, 10 + m + n , "USER_ON %u %d" ,dummy.sin_addr.s_addr, htons(clientPort) );
+						snprintf(&buf, sizeof(buf), "USER_ON %u %d" ,dummy.sin_addr.s_addr, htons(clientPort) );
+                        printf("--------- %s %d\n", &buf, 10+m+n);
 	   				 	//Send the character
-	   		 			if(send(clientSock,&buf,strlen(buf),0)==-1)
+	   		 			if(send(clientSock,buf,strlen(buf)+1,0)==-1)
 							perror_exit("write");
 					}
 					close(clientSock);
@@ -142,17 +148,18 @@ int main(int argc, char* argv[]){
 			case 2: 
 				//GET_CLIENTS
 				//CLIENT_LIST N <IP1, PORT1> <IP2 PORT2> ... <IPN, PORTN>
-				n=numOfDigits(numOfClients);
-				snprintf(buf, sizeof(buf), "CLIENT_LIST %d", numOfClients);
+				snprintf(buf, sizeof(buf), "CLIENT_LIST %04d", numOfClients-1);
 				printf("BUf is : %s\n", buf);
-				send(newsocket, &buf, strlen(buf) +1,0);
+				send(newsocket, buf, strlen(buf)+1,0);
 				templist=clientList;
 				while(templist!=NULL){
 					inet_aton(clientList->clientIP,&dummy.sin_addr);
-					m=numOfDigits(dummy.sin_addr.s_addr);
-					n=numOfDigits(htons(clientList->clientPort));
-					snprintf(buf, m + n + 1 , "%u %d" ,dummy.sin_addr.s_addr, htons(clientList->clientPort) );
-					send(newsocket, &buf, strlen(buf) +1 ,0);
+                    if (strcmp(templist->clientIP, ip) != 0 || templist->clientPort != clientPort) {
+                        ip_addr = inet_addr(templist->clientIP);
+                        send(newsocket, &ip_addr, sizeof(in_addr_t), 0);
+                        iport = htons(templist->clientPort);
+                        send(newsocket, &iport, sizeof(iport), 0);
+                    }
 					templist=templist->next;
 				}
 				break;
@@ -208,14 +215,17 @@ int main(int argc, char* argv[]){
 		}
 		print(clientList);
 		close(newsocket);
-		turns++;
 		c=0;
-		if(turns==2)
-			break;
    }
-
+printf("HI");
 	destroyList(&clientList);
 	close(sock);
 	return 0;
 }
+
+void signal_handler(int signo){
+	if(signo==SIGINT)
+		run=0;
+	return;
+} 
 
